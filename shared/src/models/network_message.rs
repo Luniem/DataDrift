@@ -20,6 +20,7 @@ pub struct StartGameMessage {
 #[derive(Serialize, Deserialize)]
 pub struct ConnectionInfoMessage {
     pub player_id: String,
+    pub players_connected: u32,
 }
 
 #[derive(Serialize, Deserialize)]

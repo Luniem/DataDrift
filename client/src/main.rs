@@ -1,6 +1,6 @@
-use bevy::{prelude::*, tasks::AsyncComputeTaskPool};
+use bevy::prelude::*;
 use networking::{setup_network_client, NetworkClient, UnboundedReceiverResource};
-use player::{move_player, Player};
+use player::Player;
 use shared::models::{
     direction::Direction,
     network_message::{NetworkMessage, PlayerUpdateMessage},
@@ -8,30 +8,37 @@ use shared::models::{
 
 const BACKEND_WEBSOCKET_URL: &str = "ws://localhost:9001";
 
+mod menu;
 mod networking;
 mod player;
+mod splash;
+
+#[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
+enum GameState {
+    #[default]
+    Splash,
+    Menu,
+    Game,
+}
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .insert_resource(Time::<Fixed>::from_seconds(0.02))
-        .add_systems(Startup, (setup, setup_network_client))
-        .add_systems(
-            FixedUpdate,
-            (send_player_updates, handle_websocket_messages),
-        )
-        .add_systems(Update, (move_player, check_exit_game, handle_exit))
+        .init_state::<GameState>()
+        .add_systems(Startup, (setup_camera, setup_network_client))
+        .add_systems(Update, (check_exit_game, handle_exit))
+        // .add_systems(
+        //     FixedUpdate,
+        //     (send_player_updates, handle_websocket_messages),
+        // )
+        // .add_systems(Update, move_player)
+        .add_plugins((splash::splash_plugin, menu::menu_plugin))
         .run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_camera(mut commands: Commands) {
     commands.spawn(Camera2d::default());
-    // We want to have a startscreen first.
-    // commands.spawn((
-    //     Player::default(),
-    //     Sprite::from_image(asset_server.load("bullet.png")),
-    //     Transform::from_xyz(100.0, 100.0, 0.0),
-    // ));
 }
 
 /// Here we check if the user presses ESC for closing the game
@@ -55,10 +62,7 @@ fn handle_exit(
     }
 }
 
-fn send_player_updates(
-    query: Query<&Player, With<Player>>,
-    mut network_client: ResMut<NetworkClient>,
-) {
+fn send_player_updates(query: Query<&Player, With<Player>>, network_client: Res<NetworkClient>) {
     for player in query.iter() {
         // update the player to the backend
         let curr_dir = match player.current_direction {
@@ -69,25 +73,37 @@ fn send_player_updates(
         let update_message = NetworkMessage::PlayerUpdate(PlayerUpdateMessage {
             current_direction: curr_dir,
         });
+
+        // send messsage to backend
         network_client.send_message(update_message);
     }
 }
 
 fn handle_websocket_messages(mut message_receiver: ResMut<UnboundedReceiverResource>) {
-    if message_receiver.receiver.is_empty() {
+    if !message_receiver.receiver.is_empty() {
         println!("Wait for message");
         let message = message_receiver.receiver.blocking_recv();
         if let Some(message) = message {
             match message {
-                NetworkMessage::StartGame(start_game_message) => todo!(),
+                NetworkMessage::StartGame(_start_game_message) => {
+                    todo!("set game state to game and spawn all entites etc")
+                }
                 NetworkMessage::ConnectionInfo(connection_info_message) => {
-                    println!("{}", connection_info_message.player_id);
+                    println!(
+                        "We got a connection info: {}",
+                        connection_info_message.player_id
+                    );
                 }
-                NetworkMessage::GameState(game_state_message) => todo!(),
-                NetworkMessage::PlayerUpdate(player_update_message) => {
-                    panic!("Should not get a player update message from backend!")
-                }
+                NetworkMessage::GameState(_game_state_message) => todo!(),
+                _ => {}
             };
         }
+    }
+}
+
+// used for despaning all entities with a specific component
+fn despawn_screen<T: Component>(to_despawn: Query<Entity, With<T>>, mut commands: Commands) {
+    for entity in &to_despawn {
+        commands.entity(entity).despawn_recursive();
     }
 }

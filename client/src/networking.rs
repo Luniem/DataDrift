@@ -1,18 +1,12 @@
-use std::{
-    net::TcpStream,
-    sync::{Arc, Mutex},
-    thread::sleep,
-    time::Duration,
-};
+use std::sync::Arc;
 
-use async_tungstenite::tungstenite::{client, connect, stream::MaybeTlsStream, Message, WebSocket};
+use async_std::{net::TcpStream, sync::Mutex};
+use async_tungstenite::{async_std::connect_async, tungstenite::Message, WebSocketStream};
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
+use futures::{stream::SplitSink, SinkExt, StreamExt};
 use shared::models::network_message::NetworkMessage;
-use tokio::{
-    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    time::interval,
-};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use crate::BACKEND_WEBSOCKET_URL;
 
@@ -24,7 +18,7 @@ pub struct UnboundedReceiverResource {
 #[derive(Resource)]
 pub struct NetworkClient {
     socket_url: String,
-    socket: Option<Arc<Mutex<WebSocket<mio::net::TcpStream>>>>,
+    write_socket: Arc<Mutex<Option<SplitSink<WebSocketStream<TcpStream>, Message>>>>,
     unbounded_sender: Arc<UnboundedSender<NetworkMessage>>,
 }
 
@@ -33,7 +27,7 @@ impl NetworkClient {
     pub fn new(websocket_url: String, unbounded_sender: UnboundedSender<NetworkMessage>) -> Self {
         NetworkClient {
             socket_url: websocket_url,
-            socket: None,
+            write_socket: Arc::new(Mutex::new(None)),
             unbounded_sender: Arc::new(unbounded_sender),
         }
     }
@@ -41,63 +35,63 @@ impl NetworkClient {
     /// Will connect to the websocket.
     /// If it is not able to connect, we will panic for the sake of simplicity.
     pub fn connect(&mut self) -> () {
-        // don't connect if we already have a socket open
-        if self.socket.is_some() {
-            return;
-        }
+        // spawn a new thread to create the websocket-connection and handle incoming messages
+        // save the write-stream in the network-client
+        let cloned_socket_url = self.socket_url.clone();
+        let cloned_write_socket = Arc::clone(&self.write_socket);
+        let cloned_sender = Arc::clone(&self.unbounded_sender);
 
-        let noraml_tc = TcpStream::connect("127.0.0.1:9001").unwrap();
-        let tcp_stream = mio::net::TcpStream::from_std(noraml_tc);
-        let (socket, _) = client(self.socket_url.clone(), tcp_stream).unwrap();
-        // let (socket, _) = connect(&self.socket_url).expect("Failed to connect to the Websocket!");
-
-        let rc_socket = Arc::new(Mutex::new(socket));
-
-        let cloned_socket = Arc::clone(&rc_socket);
-        let cloned_unbounded_sender = Arc::clone(&self.unbounded_sender);
         let task_pool = AsyncComputeTaskPool::get();
         task_pool
             .spawn(async move {
-                loop {
-                    // let the thread sleep for some time so it does not hug the lock on the socket
-                    async_std::task::sleep(Duration::from_millis(20)).await;
-                    {
-                        let mut locked_socket = cloned_socket.lock().unwrap();
-                        println!("Test");
-                        let msg = locked_socket.read_message();
-                        println!("Test2");
+                let (ws_stream, _) = connect_async(cloned_socket_url)
+                    .await
+                    .expect("Failed to connect to the Websocket!");
 
-                        match msg {
-                            Ok(websocket_message) => {
-                                let deserialized: NetworkMessage =
-                                    serde_json::from_str(websocket_message.to_text().unwrap())
-                                        .unwrap();
-                                println!("Ship it!");
-                                cloned_unbounded_sender.send(deserialized).unwrap();
-                            }
-                            Err(_) => break, // leave the loop and kill the thread
-                        };
-                    }
+                let (write_stream, mut read_stream) = ws_stream.split();
+
+                // save the write-stream in the network-client and drop the lock
+                let mut write_socket = cloned_write_socket.lock().await;
+                *write_socket = Some(write_stream);
+                drop(write_socket);
+
+                // handle incoming messages and send them to the unbounded-channel
+                loop {
+                    let msg: Message = read_stream.next().await.unwrap().unwrap();
+
+                    // let msg = read.stream.next().await.unwrap().unwrap();
+                    let deserialized: NetworkMessage =
+                        serde_json::from_str(msg.to_text().unwrap()).unwrap();
+                    cloned_sender.send(deserialized).unwrap();
                 }
             })
             .detach();
-
-        self.socket = Some(rc_socket);
     }
 
-    pub fn send_message(&mut self, message: NetworkMessage) -> () {
-        if let Some(socket) = &self.socket {
-            let mut locked_socket = socket.lock().unwrap();
-            let _ = locked_socket
-                .write_message(Message::text(serde_json::to_string(&message).unwrap()));
-        }
+    pub fn send_message(&self, message: NetworkMessage) -> () {
+        // spawn an async call and don't wait on it to send the message
+        let cloned_write_socket = Arc::clone(&self.write_socket);
+        let task_pool = AsyncComputeTaskPool::get();
+
+        task_pool
+            .spawn(async move {
+                let mut write_socket_lock = cloned_write_socket.lock().await;
+                if let Some(write) = &mut *write_socket_lock {
+                    write
+                        .send(Message::text(serde_json::to_string(&message).unwrap()))
+                        .await
+                        .unwrap();
+                }
+            })
+            .detach();
     }
 
     pub fn disconnect(&mut self) -> () {
-        if let Some(socket) = self.socket.as_mut() {
-            let mut locked_socket = socket.lock().unwrap();
-            let _ = locked_socket.close(None);
-        }
+        //TODO: Implement disconnect
+        // if let Some(socket) = self.socket.as_mut() {
+        //     let mut locked_socket = socket.lock().unwrap();
+        //     let _ = locked_socket.close(None);
+        // }
     }
 }
 

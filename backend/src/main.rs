@@ -1,13 +1,16 @@
+use async_std::{net::TcpListener, sync::Mutex};
+use async_tungstenite::accept_async;
+use futures::StreamExt;
 use game_state::GameState;
 use shared::models::network_message::{ConnectionInfoMessage, NetworkMessage};
 use std::{
-    net::TcpListener,
-    sync::{Arc, Mutex},
-    thread::{spawn, JoinHandle},
+    collections::HashMap,
+    hash::Hash,
+    sync::Arc,
+    thread::{sleep, spawn},
     time::Duration,
 };
-use tokio::time::interval;
-use tungstenite::accept;
+use tokio::{task::JoinHandle, time::interval};
 
 pub mod game_state;
 
@@ -16,38 +19,42 @@ async fn main() {
     let game_state = Arc::new(Mutex::new(GameState {
         players: Vec::new(),
         game_started: false,
+        player_write_sockets: HashMap::new(),
+        // player_sockets: HashMap::new(),
     }));
 
     let listener_thread = spawn_up_listener_thread(Arc::clone(&game_state));
     spawn_up_game_ticks(game_state);
 
-    listener_thread.join().unwrap();
+    listener_thread.await.unwrap();
 }
 
 fn spawn_up_listener_thread(game_state: Arc<Mutex<GameState>>) -> JoinHandle<()> {
-    spawn(move || {
-        let server = TcpListener::bind("127.0.0.1:9001").unwrap();
+    tokio::spawn(async move {
+        let server = TcpListener::bind("127.0.0.1:9001").await.unwrap();
 
-        for stream in server.incoming() {
-            // copy the game state for the new connection
+        while let Ok((stream, addr)) = server.accept().await {
             let cloned_game_state = Arc::clone(&game_state);
 
-            spawn(move || {
-                let mut websocket = accept(stream.unwrap()).unwrap();
-                {
-                    let mut game_state = cloned_game_state.lock().unwrap();
-                    let uuid = game_state.connecting_player();
-                    println!("Connected: {}", uuid);
+            tokio::spawn(async move {
+                let mut websocket = accept_async(stream).await.unwrap();
+                // split the websocket into a read and write stream
+                let (write_stream, mut read_stream) = websocket.split();
 
-                    // send back the uuid
-                    let conn_info_msg =
-                        NetworkMessage::ConnectionInfo(ConnectionInfoMessage { player_id: uuid });
-                    let serialized_message = serde_json::to_string(&conn_info_msg).unwrap();
-                    let _ = websocket.send(serialized_message.into()); // normally we would check here for working message
+                {
+                    let mut game_state = cloned_game_state.lock().await;
+                    // add the new player to the game state
+                    let uuid = game_state.connecting_player();
+                    game_state
+                        .player_write_sockets
+                        .insert(uuid.clone(), write_stream);
+
+                    game_state.notify_about_player_joining().await;
                 }
 
+                // handle incoming messages
                 loop {
-                    let msg = websocket.read();
+                    let msg = read_stream.next().await.unwrap();
 
                     match msg {
                         Ok(msg) => {
@@ -63,7 +70,7 @@ fn spawn_up_listener_thread(game_state: Arc<Mutex<GameState>>) -> JoinHandle<()>
                 }
 
                 {
-                    let mut game_state = cloned_game_state.lock().unwrap();
+                    let mut game_state = cloned_game_state.lock().await;
                     game_state.players.remove(0);
                 }
             });
@@ -77,7 +84,7 @@ fn spawn_up_game_ticks(game_state: Arc<Mutex<GameState>>) -> () {
 
         loop {
             interval.tick().await;
-            let game_state = game_state.lock().unwrap();
+            let game_state = game_state.lock().await;
         }
     });
 }
