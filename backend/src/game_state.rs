@@ -1,17 +1,20 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, f32::consts::PI};
 
 use async_std::net::TcpStream;
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use futures::{stream::SplitSink, SinkExt};
+use rand::Rng;
 use shared::models::{
-    network_message::{ConnectionInfoMessage, NetworkMessage},
-    player_states::PlayerStates,
+    direction::Direction,
+    network_message::{ConnectionInfoMessage, GameStateMessage, NetworkMessage},
+    player_states::{LobbyState, PlayerStates},
+    GAME_BOARD_HEIGHT, GAME_BOARD_WIDTH,
 };
 use uuid::Uuid;
 
 pub struct GameState {
     pub players: Vec<PlayerStates>,
-    pub game_started: bool,
+    pub lobby_state: LobbyState,
     pub player_write_sockets: HashMap<String, SplitSink<WebSocketStream<TcpStream>, Message>>,
 }
 
@@ -23,7 +26,61 @@ impl GameState {
         uuid
     }
 
-    pub fn move_players(&self) -> () {}
+    pub fn disconnecting_player(&mut self, uuid: &str) -> () {
+        let remove_index = self
+            .players
+            .iter()
+            .position(|p| p.id == uuid)
+            .expect("Could not find player!");
+
+        self.players.remove(remove_index);
+
+        // remove socket
+        self.player_write_sockets.remove(uuid);
+    }
+
+    pub fn init_game(&mut self) -> () {
+        // Initialize random generator
+        let mut rng = rand::rng();
+
+        // Set bounds for random position
+        let x_min = -250.0;
+        let x_max = 250.0;
+        let y_min = -250.0;
+        let y_max = 250.0;
+
+        // Iterate over all players to set a random position and direction
+        for player in self.players.iter_mut() {
+            // Randomize player position within the defined bounds
+            player.position_x = rng.random_range(x_min..x_max);
+            player.position_y = rng.random_range(y_min..y_max);
+
+            // Randomize the player's direction (angle) between 0 and 2 * PI
+            player.direction = rng.random_range(0.0..(2.0 * PI));
+            player.is_alive = true;
+            player.current_direction = Direction::Straight;
+            player.trail = Vec::new();
+        }
+    }
+
+    pub fn next_step(&mut self) -> () {
+        // move all players - calculate directions
+        for player in self.players.as_mut_slice() {
+            if player.is_alive {
+                player.steer_player();
+                player.move_player();
+            }
+        }
+
+        //check for collisions
+        self.check_collision();
+
+        // check if finished (is finished when only 1 or none player are alive)
+        let alive_players_count = self.players.iter().filter(|p| p.is_alive).count();
+        if alive_players_count <= 1 {
+            self.lobby_state = LobbyState::Finished;
+        }
+    }
 
     pub fn check_collision(&mut self) -> () {
         for i in 0..self.players.len() {
@@ -34,9 +91,22 @@ impl GameState {
                 continue;
             }
 
-            first_player.collides_with_own_trail();
+            // check if we are out of bounds
+            if first_player.position_x > (GAME_BOARD_WIDTH / 2.0)
+                || first_player.position_x < (GAME_BOARD_WIDTH / 2.0 * -1.0)
+                || first_player.position_y > (GAME_BOARD_HEIGHT / 2.0)
+                || first_player.position_y < (GAME_BOARD_HEIGHT / 2.0 * -1.0)
+            {
+                first_player.is_alive = false;
+            }
 
             for second_player in second_part {
+                if second_player.is_alive
+                    && second_player.collide_with_trail_collection(&first_player.trail)
+                {
+                    second_player.is_alive = false;
+                }
+
                 first_player.collides_with_other_player(second_player);
             }
         }
@@ -44,7 +114,6 @@ impl GameState {
 
     pub async fn notify_about_player_joining(&mut self) -> () {
         let player_count = self.player_write_sockets.len();
-        println!("Player count: {}", player_count);
 
         for (uuid, write_socket) in &mut self.player_write_sockets {
             let message = NetworkMessage::ConnectionInfo(ConnectionInfoMessage {
@@ -53,32 +122,48 @@ impl GameState {
             });
 
             let serialized_player = serde_json::to_string(&message).unwrap();
-            println!("Sending message: {}", uuid);
 
-            // Await the send operation to ensure the message is sent
             if let Err(e) = write_socket.send(Message::Text(serialized_player)).await {
                 println!("Failed to send message to {}: {:?}", uuid, e);
             }
         }
     }
 
-    pub fn notify_all_players(&mut self, message: NetworkMessage) -> () {
-        self.player_write_sockets
-            .iter_mut()
-            .for_each(|(uuid, write_socket)| {
-                let serialized_player = serde_json::to_string(&message).unwrap();
-                let _ = write_socket.send(Message::Text(serialized_player));
-            });
+    pub async fn notify_all_players(&mut self, message: String) -> () {
+        for (uuid, write_socket) in &mut self.player_write_sockets {
+            if let Err(e) = write_socket.send(Message::Text(message.clone())).await {
+                println!("Failed to send message to {}: {:?}", uuid, e);
+            }
+        }
     }
 
-    // pub fn notify_single_players(&mut self, uuid: String, message: NetworkMessage) -> () {
-    //     self.player_write_sockets
-    //         .iter()
-    //         .for_each(|(uuid, mut write_socket)| {
-    //             let serialized_player = serde_json::to_string(&message).unwrap();
-    //             tokio::spawn(async move {
-    //                 let _ = write_socket.send(Message::Text(serialized_player));
-    //             });
-    //         });
-    // }
+    pub fn get_game_state_message(&self) -> NetworkMessage {
+        let lobby_state = match self.lobby_state {
+            LobbyState::Waiting => LobbyState::Waiting,
+            LobbyState::Countdown(countdown) => LobbyState::Countdown(countdown),
+            LobbyState::Running => LobbyState::Running,
+            LobbyState::Finished => LobbyState::Finished,
+        };
+
+        let player_states: Vec<PlayerStates> = self.players.clone();
+
+        NetworkMessage::GameState(GameStateMessage {
+            lobby_state: lobby_state,
+            player_states: player_states,
+        })
+    }
+
+    pub fn update_player(&mut self, player_id: &str, direction: Direction) -> () {
+        let player_index = self
+            .players
+            .iter()
+            .position(|p| p.id == player_id)
+            .expect("Could not find player!");
+
+        // update player direction
+        self.players
+            .get_mut(player_index)
+            .unwrap()
+            .set_direction(direction);
+    }
 }

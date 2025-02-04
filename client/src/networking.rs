@@ -51,9 +51,10 @@ impl NetworkClient {
                 let (write_stream, mut read_stream) = ws_stream.split();
 
                 // save the write-stream in the network-client and drop the lock
-                let mut write_socket = cloned_write_socket.lock().await;
-                *write_socket = Some(write_stream);
-                drop(write_socket);
+                {
+                    let mut write_socket = cloned_write_socket.lock().await;
+                    *write_socket = Some(write_stream);
+                }
 
                 // handle incoming messages and send them to the unbounded-channel
                 loop {

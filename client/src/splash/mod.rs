@@ -1,7 +1,6 @@
 use bevy::prelude::*;
-use shared::models::network_message::NetworkMessage;
 
-use crate::{despawn_screen, networking::UnboundedReceiverResource, player::ConnectionInfo};
+use crate::{despawn_screen, player::ConnectionInfo};
 
 use super::GameState;
 
@@ -42,27 +41,29 @@ fn splash_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         });
 }
 
-// Tick the timer, and change state when finished
+// turn to menu once we are connected
 fn check_for_connection_info(
-    mut commands: Commands,
+    connection_info: Option<Res<ConnectionInfo>>,
     mut game_state: ResMut<NextState<GameState>>,
-    mut message_receiver: ResMut<UnboundedReceiverResource>,
 ) {
-    if !message_receiver.receiver.is_empty() {
-        let message = message_receiver.receiver.blocking_recv();
-        if let Some(message) = message {
-            match message {
-                NetworkMessage::ConnectionInfo(connection_info_message) => {
-                    // put connection info as resource
-                    commands.insert_resource(ConnectionInfo {
-                        uuid: connection_info_message.player_id,
-                        players_connected: connection_info_message.players_connected,
-                    });
-                    // end splash screen
-                    game_state.set(GameState::Menu);
-                }
-                _ => {}
-            };
-        }
+    if connection_info.is_some() {
+        // end splash screen
+        game_state.set(GameState::Menu);
     }
 }
+
+// let message = message_receiver.receiver.blocking_recv();
+//         if let Some(message) = message {
+//             match message {
+//                 NetworkMessage::ConnectionInfo(connection_info_message) => {
+//                     // put connection info as resource
+//                     commands.insert_resource(ConnectionInfo {
+//                         uuid: connection_info_message.player_id,
+//                         players_connected: connection_info_message.players_connected,
+//                     });
+//                     // end splash screen
+//                     game_state.set(GameState::Menu);
+//                 }
+//                 _ => {}
+//             };
+//         }

@@ -1,6 +1,7 @@
 use bevy::{app::AppExit, prelude::*};
+use shared::models::network_message::NetworkMessage;
 
-use crate::{player::ConnectionInfo, GameState};
+use crate::{networking::NetworkClient, player::ConnectionInfo, GameState};
 
 use super::despawn_screen;
 
@@ -125,12 +126,14 @@ fn menu_action(
     >,
     mut app_exit_events: EventWriter<AppExit>,
     mut game_state: ResMut<NextState<GameState>>,
+    network_client: Res<NetworkClient>,
 ) {
     for (interaction, menu_button_action) in &interaction_query {
         if *interaction == Interaction::Pressed {
             match menu_button_action {
                 MenuButtonAction::Play => {
-                    game_state.set(GameState::Game);
+                    // send play request to backend - main will handle response
+                    network_client.send_message(NetworkMessage::RequestStart(()));
                 }
 
                 MenuButtonAction::Quit => {

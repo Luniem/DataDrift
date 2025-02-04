@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use shared::models::direction::Direction;
 
+use crate::{game::OnGameScreen, BackendState};
+
 const MOVE_SPEED: f32 = 200.0;
 const ROTATION_SPEED: f32 = 2.5;
 
@@ -10,10 +12,17 @@ pub struct ConnectionInfo {
     pub players_connected: u32,
 }
 
+#[derive(Resource)]
+pub struct RenderedTrails {
+    pub count: u32,
+}
+
 #[derive(Component)]
 pub struct Player {
     pub uuid: String,
     pub rotation: Quat,
+    pub is_alive: bool,
+    pub is_own_player: bool,
     pub current_direction: Direction,
 }
 
@@ -22,6 +31,8 @@ impl Player {
         Self {
             uuid: uuid,
             rotation: Quat::IDENTITY,
+            is_alive: true,
+            is_own_player: false,
             current_direction: Direction::Straight,
         }
     }
@@ -58,17 +69,68 @@ pub fn move_player(
     time: Res<Time>,
 ) {
     for (mut player, mut transform) in query.iter_mut() {
-        let mut direction = Vec3::ZERO;
+        if player.is_alive {
+            let mut direction = Vec3::ZERO;
 
-        player.steer_player(&keys, time.delta_secs());
+            if player.is_own_player {
+                player.steer_player(&keys, time.delta_secs());
+            }
 
-        // move our player according to local input
-        direction.x += MOVE_SPEED * time.delta_secs();
-        direction = player.rotation.mul_vec3(direction);
+            // move our player according to local input
+            direction.x += MOVE_SPEED * time.delta_secs();
+            direction = player.rotation.mul_vec3(direction);
 
-        if 0.0 < direction.length() {
-            transform.translation += direction;
-            transform.rotation = player.rotation;
+            if 0.0 < direction.length() {
+                transform.translation += direction;
+                transform.rotation = player.rotation;
+            }
         }
     }
+}
+
+pub fn spawn_players_according_to_backend(
+    mut commands: Commands,
+    backend_state: Res<BackendState>,
+    connection_info: Res<ConnectionInfo>,
+    asset_server: Res<AssetServer>,
+) {
+    let player_id = &connection_info.uuid;
+    for player in backend_state.players.iter().filter(|p| &p.id != player_id) {
+        let quat = Quat::from_rotation_z(player.direction);
+
+        commands.spawn((
+            Sprite::from_image(asset_server.load("bullet.png")),
+            Transform::from_xyz(player.position_x, player.position_y, 1.0).with_rotation(quat),
+            Player {
+                uuid: player.id.clone(),
+                current_direction: Direction::Straight,
+                is_alive: player.is_alive,
+                is_own_player: false,
+                rotation: Quat::from_rotation_z(player.direction),
+            },
+            OnGameScreen,
+        ));
+    }
+
+    // own player
+    let own_player_index = backend_state
+        .players
+        .iter()
+        .position(|p| &p.id == player_id)
+        .unwrap();
+    let own_player = backend_state.players.get(own_player_index).unwrap();
+    let quat = Quat::from_rotation_z(own_player.direction);
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("own_bullet.png")),
+        Transform::from_xyz(own_player.position_x, own_player.position_y, 1.0).with_rotation(quat),
+        Player {
+            uuid: own_player.id.clone(),
+            current_direction: Direction::Straight,
+            is_alive: own_player.is_alive,
+            is_own_player: true,
+            rotation: Quat::from_rotation_z(own_player.direction),
+        },
+        OnGameScreen,
+    ));
 }

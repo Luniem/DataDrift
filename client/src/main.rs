@@ -1,13 +1,16 @@
 use bevy::prelude::*;
+use game::FrontendLobbyState;
 use networking::{setup_network_client, NetworkClient, UnboundedReceiverResource};
-use player::Player;
+use player::{ConnectionInfo, Player};
 use shared::models::{
     direction::Direction,
     network_message::{NetworkMessage, PlayerUpdateMessage},
+    player_states::{LobbyState, PlayerStates},
 };
 
 const BACKEND_WEBSOCKET_URL: &str = "ws://localhost:9001";
 
+mod game;
 mod menu;
 mod networking;
 mod player;
@@ -21,19 +24,28 @@ enum GameState {
     Game,
 }
 
+#[derive(Resource)]
+pub struct BackendState {
+    pub countdown: u32,
+    pub players: Vec<PlayerStates>,
+}
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .insert_resource(Time::<Fixed>::from_seconds(0.02))
+        .insert_resource(Time::<Fixed>::from_seconds(0.1))
+        .insert_resource(BackendState {
+            countdown: 0,
+            players: Vec::new(),
+        })
         .init_state::<GameState>()
         .add_systems(Startup, (setup_camera, setup_network_client))
-        .add_systems(Update, (check_exit_game, handle_exit))
-        // .add_systems(
-        //     FixedUpdate,
-        //     (send_player_updates, handle_websocket_messages),
-        // )
-        // .add_systems(Update, move_player)
-        .add_plugins((splash::splash_plugin, menu::menu_plugin))
+        .add_systems(
+            Update,
+            (handle_websocket_messages, check_exit_game, handle_exit),
+        )
+        .add_systems(FixedUpdate, send_player_updates)
+        .add_plugins((splash::splash_plugin, menu::menu_plugin, game::game_plugin))
         .run();
 }
 
@@ -79,22 +91,43 @@ fn send_player_updates(query: Query<&Player, With<Player>>, network_client: Res<
     }
 }
 
-fn handle_websocket_messages(mut message_receiver: ResMut<UnboundedReceiverResource>) {
+fn handle_websocket_messages(
+    mut commands: Commands,
+    mut message_receiver: ResMut<UnboundedReceiverResource>,
+    mut lobby_state: ResMut<NextState<FrontendLobbyState>>,
+    mut backend_state: ResMut<BackendState>,
+    mut game_state: ResMut<NextState<GameState>>,
+) {
     if !message_receiver.receiver.is_empty() {
-        println!("Wait for message");
         let message = message_receiver.receiver.blocking_recv();
         if let Some(message) = message {
             match message {
-                NetworkMessage::StartGame(_start_game_message) => {
-                    todo!("set game state to game and spawn all entites etc")
-                }
                 NetworkMessage::ConnectionInfo(connection_info_message) => {
-                    println!(
-                        "We got a connection info: {}",
-                        connection_info_message.player_id
-                    );
+                    commands.insert_resource(ConnectionInfo {
+                        uuid: connection_info_message.player_id,
+                        players_connected: connection_info_message.players_connected,
+                    });
                 }
-                NetworkMessage::GameState(_game_state_message) => todo!(),
+                NetworkMessage::GameState(game_state_message) => {
+                    // check lobby-state
+                    game_state.set(GameState::Game);
+
+                    backend_state.players = game_state_message.player_states;
+
+                    match game_state_message.lobby_state {
+                        shared::models::player_states::LobbyState::Waiting => {}
+                        shared::models::player_states::LobbyState::Countdown(num) => {
+                            backend_state.countdown = num;
+                            lobby_state.set(FrontendLobbyState::Countdown);
+                        }
+                        shared::models::player_states::LobbyState::Running => {
+                            lobby_state.set(FrontendLobbyState::Running)
+                        }
+                        shared::models::player_states::LobbyState::Finished => {
+                            lobby_state.set(FrontendLobbyState::Finished)
+                        }
+                    };
+                }
                 _ => {}
             };
         }

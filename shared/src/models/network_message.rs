@@ -1,20 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-use super::{direction::Direction, player_states::PlayerStates};
+use super::{
+    direction::Direction,
+    player_states::{LobbyState, PlayerStates},
+};
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum NetworkMessage {
-    StartGame(StartGameMessage), // event that tells that the game starts, includes the first states already
     ConnectionInfo(ConnectionInfoMessage), // info that is send to the user when he is connecting
-    GameState(GameStateMessage), // cyclic update of the game
-    PlayerUpdate(PlayerUpdateMessage), // the update that the player sents to the server
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct StartGameMessage {
-    pub start_time: u64,
-    pub player_states: Vec<PlayerStates>,
+    RequestStart(()),                      // player requests start of game
+    PlayerUpdate(PlayerUpdateMessage),     // the update that the player sents to the server
+    GameState(GameStateMessage),           // cyclic update of the game
 }
 
 #[derive(Serialize, Deserialize)]
@@ -25,6 +22,7 @@ pub struct ConnectionInfoMessage {
 
 #[derive(Serialize, Deserialize)]
 pub struct GameStateMessage {
+    pub lobby_state: LobbyState,
     pub player_states: Vec<PlayerStates>,
 }
 
