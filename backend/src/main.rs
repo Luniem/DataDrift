@@ -98,6 +98,7 @@ fn spawn_up_listener_thread(game_state: Arc<Mutex<GameState>>) -> JoinHandle<()>
                                                 }
                                             }
                                             NetworkMessage::PlayerUpdate(player_update_message) => {
+                                                println!("Update");
                                                 let mut game_state = cloned_game_state.lock().await;
                                                 game_state.update_player(
                                                     &uuid,

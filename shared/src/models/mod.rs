@@ -2,7 +2,7 @@ pub mod direction;
 pub mod network_message;
 pub mod player_states;
 
-pub const PORT: &str = "9001";
+pub const PORT: &str = "11255";
 
 const COLLISION_RADIUS: f32 = 20.0;
 

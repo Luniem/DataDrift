@@ -8,7 +8,7 @@ use shared::models::{
     player_states::{LobbyState, PlayerStates},
 };
 
-const BACKEND_WEBSOCKET_URL: &str = "ws://localhost:9001";
+const BACKEND_WEBSOCKET_URL: &str = "ws://localhost:11255";
 
 mod game;
 mod menu;
@@ -44,7 +44,7 @@ fn main() {
             Update,
             (handle_websocket_messages, check_exit_game, handle_exit),
         )
-        .add_systems(FixedUpdate, send_player_updates)
+        // .add_systems(FixedUpdate, send_player_updates)
         .add_plugins((splash::splash_plugin, menu::menu_plugin, game::game_plugin))
         .run();
 }
