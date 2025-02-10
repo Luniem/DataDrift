@@ -53,12 +53,15 @@ impl PlayerStates {
     }
 
     pub fn collide_with_trail_collection(&self, trail_collection: &Vec<(f32, f32)>) -> bool {
+        // this is not a very efficient way of checking for collision
+        // if having multiple players with lots of trails are causing lags on the server
+        // trails could be divided into partitions that are orienting on the gameboard
+        // then you would only have to check the player against trails in his current partition and the ones around him
         for (px, py) in trail_collection {
             let dx = px - self.position_x;
             let dy = py - self.position_y;
 
             if (dx * dx + dy * dy).sqrt() < COLLISION_RADIUS {
-                println!("Collided!");
                 return true;
             }
         }

@@ -1,6 +1,6 @@
-use std::{collections::HashMap, f32::consts::PI};
+use std::{collections::HashMap, f32::consts::PI, sync::Arc, time::Duration};
 
-use async_std::net::TcpStream;
+use async_std::{net::TcpStream, sync::Mutex};
 use async_tungstenite::{tungstenite::Message, WebSocketStream};
 use futures::{stream::SplitSink, SinkExt};
 use rand::Rng;
@@ -8,10 +8,12 @@ use shared::models::{
     direction::Direction,
     network_message::{ConnectionInfoMessage, GameStateMessage, NetworkMessage},
     player_states::{LobbyState, PlayerStates},
-    GAME_BOARD_HEIGHT, GAME_BOARD_WIDTH,
+    GAME_BOARD_HEIGHT, GAME_BOARD_WIDTH, MILLIS_PER_TICK,
 };
+use tokio::time::interval;
 use uuid::Uuid;
 
+/// GameState that handles all the state in the game
 pub struct GameState {
     pub players: Vec<PlayerStates>,
     pub lobby_state: LobbyState,
@@ -19,10 +21,16 @@ pub struct GameState {
 }
 
 impl GameState {
-    pub fn connecting_player(&mut self) -> String {
+    pub fn connecting_player(
+        &mut self,
+        write_socket: SplitSink<WebSocketStream<TcpStream>, Message>,
+    ) -> String {
         let uuid = Uuid::new_v4().to_string();
         let new_player = PlayerStates::new(&uuid);
         self.players.push(new_player);
+
+        self.player_write_sockets.insert(uuid.clone(), write_socket);
+
         uuid
     }
 
@@ -166,4 +174,38 @@ impl GameState {
             .unwrap()
             .set_direction(direction);
     }
+}
+
+pub fn start_up_game_loop(game_state: Arc<Mutex<GameState>>) -> () {
+    tokio::spawn(async move {
+        let mut interval = interval(Duration::from_millis(MILLIS_PER_TICK as u64));
+
+        loop {
+            // we just wait for the interval tick down
+            // if computation inside the game-loop is taking to long, we wouldn't be able to produce the wished ticks per second anymore
+            // then we would have to keep track of time elapsed since we started the game-loop computation
+            interval.tick().await;
+
+            let mut game_state = game_state.lock().await;
+            let should_update = match game_state.lobby_state {
+                LobbyState::Waiting => false,
+                LobbyState::Countdown(_) => true,
+                LobbyState::Running => true,
+                LobbyState::Finished => false,
+            };
+
+            if should_update {
+                if game_state.lobby_state == LobbyState::Running {
+                    // move to next step in game-state
+                    game_state.next_step();
+                }
+
+                // send update to all clients
+                let message = game_state.get_game_state_message();
+                game_state
+                    .notify_all_players(serde_json::to_string(&message).unwrap())
+                    .await;
+            }
+        }
+    });
 }

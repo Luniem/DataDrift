@@ -1,12 +1,8 @@
 use bevy::prelude::*;
 use game::FrontendLobbyState;
 use networking::{setup_network_client, NetworkClient, UnboundedReceiverResource};
-use player::{ConnectionInfo, Player};
-use shared::models::{
-    direction::Direction,
-    network_message::{NetworkMessage, PlayerUpdateMessage},
-    player_states::{LobbyState, PlayerStates},
-};
+use player::ConnectionInfo;
+use shared::models::{network_message::NetworkMessage, player_states::PlayerStates};
 
 const BACKEND_WEBSOCKET_URL: &str = "ws://localhost:11255";
 
@@ -33,7 +29,7 @@ pub struct BackendState {
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .insert_resource(Time::<Fixed>::from_seconds(0.1))
+        .insert_resource(Time::<Fixed>::from_seconds(0.01))
         .insert_resource(BackendState {
             countdown: 0,
             players: Vec::new(),
@@ -71,23 +67,6 @@ fn handle_exit(
         if app_exit_event == &AppExit::Success {
             network_client.disconnect();
         }
-    }
-}
-
-fn send_player_updates(query: Query<&Player, With<Player>>, network_client: Res<NetworkClient>) {
-    for player in query.iter() {
-        // update the player to the backend
-        let curr_dir = match player.current_direction {
-            Direction::Left => Direction::Left,
-            Direction::Right => Direction::Right,
-            Direction::Straight => Direction::Straight,
-        };
-        let update_message = NetworkMessage::PlayerUpdate(PlayerUpdateMessage {
-            current_direction: curr_dir,
-        });
-
-        // send messsage to backend
-        network_client.send_message(update_message);
     }
 }
 

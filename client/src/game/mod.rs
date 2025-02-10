@@ -39,12 +39,11 @@ pub fn game_plugin(app: &mut App) {
         )
         .add_systems(
             Update,
-            move_player.run_if(in_state(FrontendLobbyState::Running)),
+            (align_with_backend, move_player).run_if(in_state(FrontendLobbyState::Running)),
         )
-        .add_systems(
-            FixedUpdate,
-            align_with_backend.run_if(in_state(FrontendLobbyState::Running)),
-        )
+        // .add_systems(
+        //     align_with_backend.run_if(in_state(FrontendLobbyState::Running)),
+        // )
         .add_systems(
             Update,
             check_quit.run_if(in_state(FrontendLobbyState::Finished)),
@@ -154,16 +153,14 @@ fn setup_players(
 
 fn align_with_backend(
     mut commands: Commands,
-    query: Query<Entity, With<Player>>,
+    mut query: Query<(&mut Transform, &mut Player)>,
     backend_state: Res<BackendState>,
-    connection_info: Res<ConnectionInfo>,
     mut rendered_trails: ResMut<RenderedTrails>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    asset_server: Res<AssetServer>,
 ) {
-    for player in backend_state.players.iter() {
-        for (i, &trail_segment) in player.trail.iter().enumerate() {
+    for backend_player in backend_state.players.iter() {
+        for (i, &trail_segment) in backend_player.trail.iter().enumerate() {
             if (i as u32) < rendered_trails.count {
                 continue; // skip already rendered
             }
@@ -175,18 +172,23 @@ fn align_with_backend(
                 OnGameScreen,
             ));
         }
+
+        // update position of player
+        for (mut player_pos, mut player) in &mut query {
+            if player.uuid == backend_player.id {
+                let quat = Quat::from_rotation_z(backend_player.direction);
+                player.is_alive = backend_player.is_alive;
+                player.rotation = quat;
+                player_pos.translation.x = backend_player.position_x;
+                player_pos.translation.y = backend_player.position_y;
+            }
+        }
     }
 
     if backend_state.players.len() > 0 {
         let first_player = backend_state.players.get(0).unwrap();
         rendered_trails.count = first_player.trail.len() as u32;
     }
-
-    for entity in query.iter() {
-        commands.entity(entity).despawn();
-    }
-
-    spawn_players_according_to_backend(commands, backend_state, connection_info, asset_server);
 }
 
 fn setup_finished(mut commands: Commands) {
