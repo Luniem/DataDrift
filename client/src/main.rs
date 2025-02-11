@@ -4,7 +4,7 @@ use networking::{setup_network_client, NetworkClient, UnboundedReceiverResource}
 use player::ConnectionInfo;
 use shared::models::{network_message::NetworkMessage, player_states::PlayerStates};
 
-const BACKEND_WEBSOCKET_URL: &str = "ws://localhost:11255";
+const BACKEND_WEBSOCKET_URL: &str = "ws://77.118.105.100:11255";
 
 mod game;
 mod menu;

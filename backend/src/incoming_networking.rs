@@ -12,7 +12,7 @@ use crate::game_state::GameState;
 /// Opens up a new thread that listens for new connections - for each connection there will be another thread to handle incoming messages
 pub fn spawn_up_listener_thread(game_state: Arc<Mutex<GameState>>) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let server = TcpListener::bind(format!("77.118.105.100:{}", PORT))
+        let server = TcpListener::bind(format!("0.0.0.0:{}", PORT))
             .await
             .unwrap();
 
