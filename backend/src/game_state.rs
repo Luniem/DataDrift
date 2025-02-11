@@ -8,7 +8,7 @@ use shared::models::{
     direction::Direction,
     network_message::{ConnectionInfoMessage, GameStateMessage, NetworkMessage},
     player_states::{LobbyState, PlayerStates},
-    GAME_BOARD_HEIGHT, GAME_BOARD_WIDTH, MILLIS_PER_TICK,
+    GAME_BOARD_HEIGHT, GAME_BOARD_WIDTH, MILLIS_PER_TICK, UNSPAWNABLE_EDGE,
 };
 use tokio::time::interval;
 use uuid::Uuid;
@@ -52,19 +52,21 @@ impl GameState {
         let mut rng = rand::rng();
 
         // Set bounds for random position
-        let x_min = -250.0;
-        let x_max = 250.0;
-        let y_min = -250.0;
-        let y_max = 250.0;
+        let x_max = (GAME_BOARD_WIDTH / 2.0) - UNSPAWNABLE_EDGE;
+        let x_min = x_max * -1.0;
+        let y_max = (GAME_BOARD_HEIGHT / 2.0) - UNSPAWNABLE_EDGE;
+        let y_min = y_max * -1.0;
 
-        // Iterate over all players to set a random position and direction
+        // go over all players and give them random position and directions
         for player in self.players.iter_mut() {
-            // Randomize player position within the defined bounds
+            // random position in defined bounds
             player.position_x = rng.random_range(x_min..x_max);
             player.position_y = rng.random_range(y_min..y_max);
 
-            // Randomize the player's direction (angle) between 0 and 2 * PI
+            // give player a random direction
             player.direction = rng.random_range(0.0..(2.0 * PI));
+
+            // reset player state
             player.is_alive = true;
             player.current_direction = Direction::Straight;
             player.trail = Vec::new();
@@ -99,6 +101,12 @@ impl GameState {
                 continue;
             }
 
+            // check if we collide with our own trail
+            if first_player.collide_with_trail_collection(&first_player.trail) {
+                first_player.is_alive = false;
+                continue;
+            }
+
             // check if we are out of bounds
             if first_player.position_x > (GAME_BOARD_WIDTH / 2.0)
                 || first_player.position_x < (GAME_BOARD_WIDTH / 2.0 * -1.0)
@@ -114,7 +122,6 @@ impl GameState {
                 {
                     second_player.is_alive = false;
                 }
-
                 first_player.collides_with_other_player(second_player);
             }
         }
