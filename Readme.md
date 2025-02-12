@@ -10,6 +10,11 @@ This is my first time ever trying to implement a game with network-features that
 - Bevy
 - WebSockets
 
+## Prerequisites
+
+When trying to build the game by yourself make sure to have the Bevy Dependencies installed:
+https://bevyengine.org/learn/quick-start/getting-started/setup/#rust-setup
+
 ### How to run it
 
 This repository holds the Game-Client, as well as the Backend and a lib for shared-models. Upon Startup the game will try to connect to the backend immediately and will not move on from the splash-screen until a connection to the backend was established. Therefore the right IP-Address needs to be set in the main.rs of the client. Localhost is used as the default IP-address. If you are connected, you can press Play and the game starts immediately. This only makes sense when there are multiple players connected. (For testing-purposes a second player can simply be connected via Postman, etc...).
