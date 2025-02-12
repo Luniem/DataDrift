@@ -140,11 +140,15 @@ impl GameState {
                 players_connected: player_count as u32,
             });
 
-            let serialized_player = serde_json::to_string(&message).unwrap();
-
-            if let Err(e) = write_socket.send(Message::Text(serialized_player)).await {
-                println!("Failed to send message to {}: {:?}", uuid, e);
+            match serde_json::to_string(&message) {
+                Ok(serialized_player) => {
+                    if let Err(e) = write_socket.send(Message::Text(serialized_player)).await {
+                        println!("Failed to send message to {}: {:?}", uuid, e);
+                    }
+                },
+                Err(_) => println!("Failed to serialize Player!"),
             }
+
         }
     }
 
@@ -180,10 +184,9 @@ impl GameState {
             .expect("Could not find player!");
 
         // update player direction
-        self.players
-            .get_mut(player_index)
-            .unwrap()
-            .set_direction(direction);
+        if let Some(player) = self.players.get_mut(player_index) {
+            player.set_direction(direction);
+        } 
     }
 }
 
@@ -213,9 +216,11 @@ pub fn start_up_game_loop(game_state: Arc<Mutex<GameState>>) -> () {
 
                 // send update to all clients
                 let message = game_state.get_game_state_message();
-                game_state
-                    .notify_all_players(serde_json::to_string(&message).unwrap())
-                    .await;
+                let serialized_message = serde_json::to_string(&message);
+                match serialized_message {
+                    Ok(serialized_message) => game_state.notify_all_players(serialized_message).await,
+                    Err(_) => println!("Failed to serialize Game-State-Message!"),
+                };
             }
         }
     });

@@ -16,7 +16,7 @@ pub fn spawn_up_listener_thread(game_state: Arc<Mutex<GameState>>) -> JoinHandle
     tokio::spawn(async move {
         let server = TcpListener::bind(format!("0.0.0.0:{}", PORT))
             .await
-            .unwrap();
+            .expect("Failed to start TCP-Listener!");
 
         while let Ok((stream, _)) = server.accept().await {
             // open new thread for each connection and give it the game state

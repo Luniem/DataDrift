@@ -22,5 +22,5 @@ async fn main() {
     start_up_game_loop(game_state);
 
     // keep main-thread running as long as the listener-thread is up
-    listener_thread.await.unwrap();
+    let _ = listener_thread.await;
 }

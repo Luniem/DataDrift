@@ -124,24 +124,27 @@ pub fn spawn_players_according_to_backend(
     }
 
     // own player
-    let own_player_index = backend_state
+    let own_player = backend_state
         .players
         .iter()
         .position(|p| &p.id == player_id)
-        .unwrap();
-    let own_player = backend_state.players.get(own_player_index).unwrap();
-    let quat = Quat::from_rotation_z(own_player.direction);
+        .map(|index| backend_state.players.get(index))
+        .flatten();
 
-    commands.spawn((
-        Sprite::from_image(asset_server.load("own_bullet.png")),
-        Transform::from_xyz(own_player.position_x, own_player.position_y, 1.0).with_rotation(quat),
-        Player {
-            uuid: own_player.id.clone(),
-            current_direction: Direction::Straight,
-            is_alive: own_player.is_alive,
-            is_own_player: true,
-            rotation: Quat::from_rotation_z(own_player.direction),
-        },
-        OnGameScreen,
-    ));
+    if let Some(own_player) = own_player {
+        let quat = Quat::from_rotation_z(own_player.direction);
+        
+        commands.spawn((
+            Sprite::from_image(asset_server.load("own_bullet.png")),
+            Transform::from_xyz(own_player.position_x, own_player.position_y, 1.0).with_rotation(quat),
+            Player {
+                uuid: own_player.id.clone(),
+                current_direction: Direction::Straight,
+                is_alive: own_player.is_alive,
+                is_own_player: true,
+                rotation: Quat::from_rotation_z(own_player.direction),
+            },
+            OnGameScreen,
+        ));
+    }
 }

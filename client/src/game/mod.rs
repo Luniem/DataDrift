@@ -183,8 +183,9 @@ fn align_with_backend(
     }
 
     if backend_state.players.len() > 0 {
-        let first_player = backend_state.players.get(0).unwrap();
-        rendered_trails.count = first_player.trail.len() as u32;
+        if let Some(first_player) =  backend_state.players.get(0) {
+            rendered_trails.count = first_player.trail.len() as u32;
+        }
     }
 }
 
