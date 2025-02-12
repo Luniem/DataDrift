@@ -34,7 +34,7 @@ fn splash_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             parent.spawn((
                 ImageNode::new(icon),
                 Node {
-                    width: Val::Px(200.0),
+                    height: Val::Percent(75.0),
                     ..default()
                 },
             ));
@@ -51,19 +51,3 @@ fn check_for_connection_info(
         game_state.set(GameState::Menu);
     }
 }
-
-// let message = message_receiver.receiver.blocking_recv();
-//         if let Some(message) = message {
-//             match message {
-//                 NetworkMessage::ConnectionInfo(connection_info_message) => {
-//                     // put connection info as resource
-//                     commands.insert_resource(ConnectionInfo {
-//                         uuid: connection_info_message.player_id,
-//                         players_connected: connection_info_message.players_connected,
-//                     });
-//                     // end splash screen
-//                     game_state.set(GameState::Menu);
-//                 }
-//                 _ => {}
-//             };
-//         }

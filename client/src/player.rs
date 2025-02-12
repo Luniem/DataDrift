@@ -110,7 +110,7 @@ pub fn spawn_players_according_to_backend(
         let quat = Quat::from_rotation_z(player.direction);
 
         commands.spawn((
-            Sprite::from_image(asset_server.load("bullet.png")),
+            Sprite::from_image(asset_server.load("enemy.png")),
             Transform::from_xyz(player.position_x, player.position_y, 1.0).with_rotation(quat),
             Player {
                 uuid: player.id.clone(),
@@ -133,10 +133,11 @@ pub fn spawn_players_according_to_backend(
 
     if let Some(own_player) = own_player {
         let quat = Quat::from_rotation_z(own_player.direction);
-        
+
         commands.spawn((
-            Sprite::from_image(asset_server.load("own_bullet.png")),
-            Transform::from_xyz(own_player.position_x, own_player.position_y, 1.0).with_rotation(quat),
+            Sprite::from_image(asset_server.load("player.png")),
+            Transform::from_xyz(own_player.position_x, own_player.position_y, 1.0)
+                .with_rotation(quat),
             Player {
                 uuid: own_player.id.clone(),
                 current_direction: Direction::Straight,

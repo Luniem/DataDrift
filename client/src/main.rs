@@ -29,7 +29,14 @@ pub struct BackendState {
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                title: "DataDrift".into(),
+                mode: bevy::window::WindowMode::Fullscreen(MonitorSelection::Primary),
+                ..default()
+            }),
+            ..default()
+        }))
         .insert_resource(Time::<Fixed>::from_seconds(0.01))
         .insert_resource(BackendState {
             countdown: 0,
@@ -41,7 +48,6 @@ fn main() {
             Update,
             (handle_websocket_messages, check_exit_game, handle_exit),
         )
-        // .add_systems(FixedUpdate, send_player_updates)
         .add_plugins((splash::splash_plugin, menu::menu_plugin, game::game_plugin))
         .run();
 }

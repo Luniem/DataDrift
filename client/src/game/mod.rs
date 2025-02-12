@@ -38,9 +38,6 @@ pub fn game_plugin(app: &mut App) {
             Update,
             (align_with_backend, move_player).run_if(in_state(FrontendLobbyState::Running)),
         )
-        // .add_systems(
-        //     align_with_backend.run_if(in_state(FrontendLobbyState::Running)),
-        // )
         .add_systems(
             Update,
             check_quit.run_if(in_state(FrontendLobbyState::Finished)),
@@ -164,7 +161,7 @@ fn align_with_backend(
 
             commands.spawn((
                 Mesh2d(meshes.add(Circle::new(5.0))),
-                MeshMaterial2d(materials.add(Color::srgb(1.0, 0.0, 0.0))),
+                MeshMaterial2d(materials.add(Color::srgb(0.9, 0.2, 0.5))),
                 Transform::from_xyz(trail_segment.0, trail_segment.1, 0.0),
                 OnGameScreen,
             ));
@@ -183,7 +180,7 @@ fn align_with_backend(
     }
 
     if backend_state.players.len() > 0 {
-        if let Some(first_player) =  backend_state.players.get(0) {
+        if let Some(first_player) = backend_state.players.get(0) {
             rendered_trails.count = first_player.trail.len() as u32;
         }
     }
