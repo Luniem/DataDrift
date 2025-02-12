@@ -5,7 +5,7 @@ use async_tungstenite::{async_std::connect_async, tungstenite::Message, WebSocke
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
 use futures::{stream::SplitSink, SinkExt, StreamExt};
-use shared::models::network_message::NetworkMessage;
+use shared::models::{network_message::NetworkMessage, PORT};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use crate::BACKEND_WEBSOCKET_URL;
@@ -88,11 +88,17 @@ impl NetworkClient {
     }
 
     pub fn disconnect(&mut self) -> () {
-        //TODO: Implement disconnect
-        // if let Some(socket) = self.socket.as_mut() {
-        //     let mut locked_socket = socket.lock().unwrap();
-        //     let _ = locked_socket.close(None);
-        // }
+        let cloned_write_socket = Arc::clone(&self.write_socket);
+        let task_pool = AsyncComputeTaskPool::get();
+        task_pool
+            .spawn(async move {
+                let mut write_socket = cloned_write_socket.lock().await;
+                if let Some(socket) = write_socket.as_mut() {
+                    let _ = (*socket).close().await;
+                }
+                *write_socket = None;
+            })
+            .detach();
     }
 }
 
@@ -105,7 +111,7 @@ pub fn setup_network_client(mut commands: Commands) {
     let (sender, receiver) = unbounded_channel::<NetworkMessage>();
 
     // create network-client and put it into resources
-    let mut client = NetworkClient::new(BACKEND_WEBSOCKET_URL.to_string(), sender);
+    let mut client = NetworkClient::new(format!("{}:{}", BACKEND_WEBSOCKET_URL, PORT), sender);
     client.connect();
 
     commands.insert_resource(client);

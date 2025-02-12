@@ -2,12 +2,10 @@ use bevy::prelude::*;
 use shared::models::{
     direction::Direction,
     network_message::{NetworkMessage, PlayerUpdateMessage},
+    MOVE_SPEED, ROTATION_SPEED,
 };
 
 use crate::{game::OnGameScreen, networking::NetworkClient, BackendState};
-
-const MOVE_SPEED: f32 = 200.0;
-const ROTATION_SPEED: f32 = 2.5;
 
 #[derive(Resource)]
 pub struct ConnectionInfo {
@@ -30,16 +28,6 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn default(uuid: String) -> Self {
-        Self {
-            uuid: uuid,
-            rotation: Quat::IDENTITY,
-            is_alive: true,
-            is_own_player: false,
-            current_direction: Direction::Straight,
-        }
-    }
-
     pub fn steer_player(
         &mut self,
         keys: &Res<ButtonInput<KeyCode>>,
@@ -86,7 +74,7 @@ pub fn move_player(
     mut query: Query<(&mut Player, &mut Transform), With<Player>>,
     keys: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    mut network_client: ResMut<NetworkClient>,
+    network_client: ResMut<NetworkClient>,
 ) {
     for (mut player, mut transform) in query.iter_mut() {
         if player.is_alive {

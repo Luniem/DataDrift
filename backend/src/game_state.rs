@@ -101,8 +101,12 @@ impl GameState {
                 continue;
             }
 
-            // check if we collide with our own trail
-            if first_player.collide_with_trail_collection(&first_player.trail) {
+            // check if we collide with our own trail (leave out the newest 5 trail segments or we would always collide with ourself)
+            if first_player.trail.len() > 5
+                && first_player.collide_with_trail_collection(
+                    &first_player.trail[0..first_player.trail.len() - 5].to_vec(),
+                )
+            {
                 first_player.is_alive = false;
                 continue;
             }

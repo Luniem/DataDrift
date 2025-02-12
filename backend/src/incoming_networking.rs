@@ -6,7 +6,6 @@ use async_std::{
 };
 use async_tungstenite::{accept_async, tungstenite::Message};
 use futures::StreamExt;
-use serde_json::Error;
 use shared::models::{network_message::NetworkMessage, player_states::LobbyState, PORT};
 use tokio::{task::JoinHandle, time::interval};
 
@@ -27,6 +26,7 @@ pub fn spawn_up_listener_thread(game_state: Arc<Mutex<GameState>>) -> JoinHandle
     })
 }
 
+/// Handles the websocket-connection, holds it open and listens for incoming messages
 async fn handle_connection(stream: TcpStream, game_state: Arc<Mutex<GameState>>) {
     let websocket = accept_async(stream)
         .await
@@ -82,13 +82,12 @@ async fn handle_connection(stream: TcpStream, game_state: Arc<Mutex<GameState>>)
     drop(game_state);
 }
 
+/// Handles a valid message - deserializes it and acts accordingly
 async fn handle_valid_message(
     message: Message,
     cloned_game_state: &Arc<Mutex<GameState>>,
     uuid: &str,
 ) -> () {
-    // let message_text = message.to_text();
-
     let parsed_message: Result<NetworkMessage, String> = message
         .to_text()
         .map_err(|err| format!("{:?}", err)) // convert the error to a string

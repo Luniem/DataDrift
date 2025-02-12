@@ -1,7 +1,4 @@
-use std::time::Duration;
-
-use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
-use shared::models::{direction::Direction, player_states::LobbyState};
+use bevy::prelude::*;
 
 use crate::{
     despawn_screen,

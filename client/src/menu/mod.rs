@@ -125,7 +125,6 @@ fn menu_action(
         (Changed<Interaction>, With<Button>),
     >,
     mut app_exit_events: EventWriter<AppExit>,
-    mut game_state: ResMut<NextState<GameState>>,
     network_client: Res<NetworkClient>,
 ) {
     for (interaction, menu_button_action) in &interaction_query {

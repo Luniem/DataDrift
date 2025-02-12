@@ -84,13 +84,13 @@ impl PlayerStates {
     }
 
     pub fn move_player(&mut self) -> () {
+        self.trail.push((self.position_x, self.position_y));
+
         let dx = MOVE_SPEED_PER_TICK * self.direction.cos();
         let dy = MOVE_SPEED_PER_TICK * self.direction.sin();
 
         self.position_x += dx;
         self.position_y += dy;
-
-        self.trail.push((self.position_x, self.position_y));
     }
 }
 
